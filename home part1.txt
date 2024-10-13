@@ -1,0 +1,328 @@
+<?php
+session_start(); // Start the session
+// Check if the user is logged in and authorized as admin or standard
+if (!isset($_SESSION['loggedin']) || !in_array($_SESSION['usertype'], ['admin', 'standard'])) {
+    header('Location: login.php');
+    exit();
+}
+
+// Enable error reporting for debugging
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+// Database connection details
+$servername = "localhost"; 
+$db_username = "root"; 
+$db_password = "root"; 
+$dbname = "prms"; 
+
+// Create connection
+$conn = new mysqli($servername, $db_username, $db_password, $dbname);
+
+// Check connection
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+
+// Logout process
+if (isset($_POST["logout"])) {
+    $username = $_SESSION['username'] ?? null; // Retrieve username from session
+    $usertype = $_SESSION['usertype'] ?? null; // Retrieve usertype from session
+    $location = $_SESSION['location'] ?? null; // Retrieve location from session
+
+    if ($username) {
+        // Insert logout time into the database
+        $logoutDate = date("Y-m-d"); 
+        $logoutTime = date("h:i:s");
+
+        // Determine the action message based on user type
+        $action = ($usertype === 'admin') ? "Admin Logout" : "Standard Logout"; 
+        
+        $insertLogoutSql = "INSERT INTO logs (username, location, usertype, date, time, action) VALUES (?, ?, ?, ?, ?, ?)";
+        $insertLogoutStmt = $conn->prepare($insertLogoutSql);
+        $insertLogoutStmt->bind_param("ssssss", $username, $location, $usertype, $logoutDate, $logoutTime, $action);
+
+        if (!$insertLogoutStmt->execute()) {
+            echo "Error: " . $insertLogoutStmt->error;
+        }
+        
+        // Destroy the session
+        session_unset();
+        session_destroy();
+        
+        // Redirect to the login page after logout
+        header("Location: login.php");
+        exit();
+    } else {
+        echo "No user is logged in.";
+    }
+}
+
+// Close connection
+$conn->close();
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rural Health Unit - Municipality of Burgos</title>
+    <style>
+     body {
+    margin: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #88AB8E;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+#header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background-color: #9BB8CD;
+    padding: 10px 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+}
+
+#logo-container {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+#img {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    border: 4px solid #fff;
+    margin-right: 10px;
+}
+
+#title-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+h1, h2 {
+    margin: 0;
+    font-size: 14px;
+    text-align: center;
+}
+
+#navigation {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 10px;
+}
+
+#navigation a {
+    text-decoration: none;
+    color: #fff;
+    margin: 0 5px;
+    font-size: 16px;
+}
+
+#logout1 {
+    background-color: #dc3545;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+#searchContainer {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    max-width: 600px;
+    margin: 70px auto 20px auto; /* Adjust margin-top to position below the header */
+}
+
+#search1 {
+    flex: 1;
+    height: 40px;
+    border: none;
+    border-radius: 8px 0 0 8px;
+    padding: 0 10px;
+    font-size: 16px;
+    box-sizing: border-box;
+}
+
+#search2 {
+    height: 40px;
+    border: none;
+    border-radius: 0 8px 8px 0;
+    padding: 0 20px;
+    font-size: 16px;
+    background-color: #28a745;
+    cursor: pointer;
+    box-sizing: border-box;
+}
+
+#content {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding-top: 20px; /* Adjust to fit below the search bar */
+    box-sizing: border-box;
+}
+
+footer {
+    background-color: #758694;
+    padding: 1px;
+    text-align: center;
+    color: #fff;
+}
+
+footer a {
+    color: #fff;
+    text-decoration: none;
+    margin: 0 10px;
+}
+
+#logoutModal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1001;
+    display: none;
+}
+
+.modal-content {
+    background-color: #405D72;
+    padding: 20px;
+    border-radius: 8px;
+    text-align: center;
+}
+
+#confirmLogout, #cancelLogout {
+    height: 50px;
+    width: 50px;
+    border-radius: 8px;
+}
+
+@media (min-width: 768px) {
+    #header {
+        padding: 20px 40px;
+    }
+
+    #img {
+        width: 100px;
+        height: 100px;
+    }
+
+    h1, h2 {
+        font-size: 18px;
+    }
+
+    #navigation a {
+        font-size: 18px;
+        margin: 0 10px;
+    }
+
+    #logout1 {
+        font-size: 18px;
+        padding: 10px 16px;
+    }
+
+    #search1 {
+        font-size: 18px;
+    }
+
+    #search2 {
+        font-size: 18px;
+    }
+}
+  }
+        
+    </style>
+    <script>
+        function confirmLogout() {
+            document.getElementById('logoutModal').style.display = 'flex';
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('confirmLogout').onclick = function() {
+                document.getElementById('logoutForm').submit(); // Submit the logout form
+            };
+
+            document.getElementById('cancelLogout').onclick = function() {
+                document.getElementById('logoutModal').style.display = 'none';
+            };
+        });
+    </script>
+</head>
+<body>
+    <div id="header">
+        <div id="logo-container">
+            <img src="logoofburgos.png" id="img" alt="Logo">
+            <div id="title-container">
+                <h1>RURAL HEALTH UNIT OF THE</h1>
+                <h2>MUNICIPALITY OF BURGOS</h2>
+            </div>
+        </div>
+        <div id="navigation">
+            <a href="OPD.php" onclick="OPD_clicked()">OPD</a>
+            <a href="#AboutUs">About Us</a>
+            <a href="logs.php">Reports</a>
+            <button id="logout1" type="button" onclick="confirmLogout()">Log Out</button>
+        </div>
+    </div>
+    
+   
+
+    <div id="content">
+          <div id="searchContainer">
+        <input id="search1" type="text" placeholder="Search..." name="search">
+        <button id="search2" type="submit">Search</button>
+    </div>
+    </div>
+
+    <div id="logoutModal">
+        <div class="modal-content">
+            <h3>Confirm Logout</h3>
+            <p>Are you sure you want to log out?</p>
+            <button id="confirmLogout">Yes</button>
+            <button id="cancelLogout">No</button>
+        </div>
+    </div>
+
+    <form id="logoutForm" action="" method="post" style="display: none;">
+        <input type="hidden" name="logout" value="1">
+    </form>
+
+    <footer>
+        <p>&copy; 2024 Municipality of Burgos. All Rights Reserved.</p>
+        <p>
+            <a href="#privacy">Privacy Policy</a> | 
+            <a href="#terms">Terms of Service</a> | 
+            <a href="#contact">Contact Us</a>
+        </p>
+    </footer>
+</body>
+
+</html>
